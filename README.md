@@ -75,7 +75,7 @@ The Jenkins pipeline defined in the `jenkinsfile` includes several stages to ens
 
 ### Pipeline Workflow
 
-
+```mermaid
 graph TD
     A[Checkout] --> B[Git-Secrets Scan]
     B --> C[Source-Composition-Analysis]
@@ -90,21 +90,22 @@ graph TD
     J --> K[Nikto Scan]
     K --> L[Port Scan]
     L --> M[DefectDojo Reporting]
+```
 
+## Additional Scripts
 
-Tools and Purpose
-graph LR
-    A[Git] --> B[Checkout]
-    C[truffleHog] --> D[Git-Secrets Scan]
-    E[detect-secrets] --> D
-    F[OWASP Dependency-Check] --> G[Source-Composition-Analysis]
-    H[SonarQube] --> I[SonarQube Scan]
-    J[Pylint] --> K[Pylint Report]
-    L[Trivy] --> M[Trivy: Configuration and IaC Review]
-    N[Dockle] --> O[Dockle: Container-Security]
-    P[Kubernetes] --> Q[Deploy to EKS]
-    R[AWS ECR] --> Q
-    S[OWASP ZAP] --> T[DAST - Zap]
-    U[Nikto] --> V[Nikto Scan]
-    W[Nmap] --> X[Port Scan]
-    Y[DefectDojo] --> Z[DefectDojo Reporting]
+### SAST_Fortify.sh
+- **Purpose**: To perform static application security testing (SAST) using Fortify.
+- **Usage**: This script is used within the Jenkins pipeline to scan the codebase for potential security vulnerabilities using Fortify.
+
+### blackduck.sh
+- **Purpose**: To scan open-source dependencies for vulnerabilities using Black Duck.
+- **Usage**: This script is used to ensure that open-source components are free from known vulnerabilities.
+
+### fortifymerge.sh
+- **Purpose**: To merge Fortify scan results.
+- **Usage**: This script is used to consolidate and merge results from multiple Fortify scans.
+
+## Conclusion
+
+This Jenkins pipeline ensures that the application code is thoroughly analyzed, scanned for vulnerabilities, and securely deployed to the production environment. By integrating various tools at different stages, this pipeline maintains high code quality and security standards.
