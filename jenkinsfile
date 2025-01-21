@@ -1,245 +1,155 @@
 pipeline {
- 	environment{
- 		GIT_CREDS=credentials("${GIT_CREDS}")
-		SONARQUBE_CREDS=credentials('SONARQUBE_CREDS')
-		BUILD_FLAG="${BUILD_FLAG}"
-		DEPLOY_FLAG="${DEPLOY_FLAG}"
-		BUILD_ON_TAG="${BUILD_ON_TAG}"
+    environment {
+        GIT_CREDS = credentials("${GIT_CREDS}")
+        SONARQUBE_CREDS = credentials('SONARQUBE_CREDS')
+        BUILD_FLAG = "${BUILD_FLAG}"
+        DEPLOY_FLAG = "${DEPLOY_FLAG}"
+        BUILD_ON_TAG = "${BUILD_ON_TAG}"
         def BUILD_NUMBER = "$currentBuild.number"
-       }
-   agent any
-
-   stages {
-      stage('Checkout using SOURCE_BRANCH') {
-      when {
-
-			  expression { BUILD_ON_TAG=='N' }
-			}
-         steps {
-            checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: '*/${SOURCE_BRANCH}']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '39e91355-dfda-4c96-845b-023fec88c18e', url:"${GIT_URL}"]]]
-         }
-      }
-      stage('Checkout using TAG') {
-      when {
-
-			  expression { BUILD_ON_TAG=='Y' }
-			}
-         steps {
-            checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'refs/tags/${TAG}']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '39e91355-dfda-4c96-845b-023fec88c18e', url:"${GIT_URL}"]]]
-         }
-      }
- 
-
-        stage('Git-Secrets Scan ')
-        {
-  			steps{
-  				echo "Starting the truffle hog scan"
-  				script{
-                     
-                      
-			var_GIT_USERNAME="${GIT_CREDS_USR}"
- 				var_GIT_PASSWORD="${GIT_CREDS_PSW}"
-  				withEnv (['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin']){
-  				echo "Calling the script truffle_hog_scan.sh"
-  				sh "chmod 777 devops/truffle_hog_scan.sh"
-  				sh "devops/truffle_hog_scan.sh ${var_GIT_USERNAME} ${var_GIT_PASSWORD} ${SOURCE_BRANCH} ${TRUFFLEHOG_DIR} ${BUILD_ON_TAG} ${WORKSPACE}"
-  			}
-       		
-       sh '''
-cd ccf-ui/
-detect-secrets scan --baseline .secrets.baseline > secrets2.json || true
-cd ..
-detect-secrets scan /home/ec2-user/.jenkins/workspace/ccf_demo_ui/ccf-ui > /home/ec2-user/.jenkins/workspace/ccf_demo_ui/detect-secrets/.secrets.baseline > secrets.json || true
-cat secrets.json || true
- 
-                
-'''
-                  
-             
-                
-  						
-  				
-  					echo "Ending Stage -> TruffleHog Scan"
-  				}
-  			}	
-  }
-  		
-     
-    
-
-	stage ('Source-Composition-Analysis') 
-       {
-		steps {
-		     sh 'rm owasp-* || true'
-            
-		     sh 'chmod 777 devops/owasp-dependency-check.sh'
-		     sh 'sudo ./devops/owasp-dependency-check.sh '
-		     sh 'cat /home/ec2-user/.jenkins/workspace/ccf_demo_ui/odc-reports/dependency-check-report.json'
-             
-		}
-	}
-	  stage('SonarQube Scan '){
-  			steps{
-  				echo "Starting the SonarQube scan"
-  				script{
-  				    def scannerHome = tool 'Sonar-1.0';
-                      withSonarQubeEnv('Sonar-1.0') {
-                      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin']){
-                     sh "${scannerHome}/bin/sonar-scanner -D sonar.projectName=${JOB_NAME}_${BUILD_NUMBER} -D sonar.projectKey=${JOB_NAME}_${BUILD_NUMBER} -D sonar.sources=./"
-  						}}
-  						
-  				
-  					echo "Ending Stage -> SonarQube Scan"
-  				}
-  		}	
-  
-  		} 
-
-
-
-      stage ('Pylint Report'){
-                steps{
-                    echo "Starting the Pylint Report"
-                    echo "${WORKSPACE}"
-                    script{
-                        var_PROJECT_PATH = "${WORKSPACE}"
-                        echo "Calling the pylint.sh script"
-                        sh "chmod 777 devops/pylint.sh"
-                        sh "devops/pylint.sh ${var_PROJECT_PATH}"
+    }
+    agent any
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    def branchOrTag = BUILD_ON_TAG == 'N' ? "*/${SOURCE_BRANCH}" : "refs/tags/${TAG}"
+                    checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: branchOrTag]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'GIT_CREDS', url: '']]]
+                }
+            }
+        }
+        stage('Git-Secrets Scan') {
+            steps {
+                echo "Starting the truffle hog scan"
+                script {
+                    var_GIT_USERNAME = "${GIT_CREDS_USR}"
+                    var_GIT_PASSWORD = "${GIT_CREDS_PSW}"
+                    withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin']) {
+                        sh "chmod 777 devops/truffle_hog_scan.sh"
+                        sh "devops/truffle_hog_scan.sh ${var_GIT_USERNAME} ${var_GIT_PASSWORD} ${SOURCE_BRANCH} ${TRUFFLEHOG_DIR} ${BUILD_ON_TAG} ${WORKSPACE}"
                     }
+                    sh '''
+                    cd ccf-ui/
+                    detect-secrets scan --baseline .secrets.baseline > secrets2.json || true
+                    cd ..
+                    detect-secrets scan /home/ec2-user/.jenkins/workspace/ccf_demo_ui/ccf-ui > /home/ec2-user/.jenkins/workspace/ccf_demo_ui/detect-secrets/.secrets.baseline > secrets.json || true
+                    cat secrets.json || true
+                    '''
+                    echo "Ending Stage -> TruffleHog Scan"
+                }
+            }
+        }
+        stage('Source-Composition-Analysis') {
+            steps {
+                sh 'rm owasp-* || true'
+                sh 'chmod 777 devops/owasp-dependency-check.sh'
+                sh 'sudo ./devops/owasp-dependency-check.sh'
+                sh 'cat /home/ec2-user/.jenkins/workspace/ccf_demo_ui/odc-reports/dependency-check-report.json'
+            }
+        }
+        stage('SonarQube Scan') {
+            steps {
+                echo "Starting the SonarQube scan"
+                script {
+                    def scannerHome = tool 'Sonar-1.0'
+                    withSonarQubeEnv('Sonar-1.0') {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin']) {
+                            sh "${scannerHome}/bin/sonar-scanner -D sonar.projectName=${JOB_NAME}_${BUILD_NUMBER} -D sonar.projectKey=${JOB_NAME}_${BUILD_NUMBER} -D sonar.sources=./"
+                        }
+                    }
+                    echo "Ending Stage -> SonarQube Scan"
+                }
+            }
+        }
+        stage('Pylint Report') {
+            steps {
+                echo "Starting the Pylint Report"
+                script {
+                    var_PROJECT_PATH = "${WORKSPACE}"
+                    sh "chmod 777 devops/pylint.sh"
+                    sh "devops/pylint.sh ${var_PROJECT_PATH}"
                     echo "Ending Stage -> Pylint Report"
                 }
-            }  
-
-//      stage('Build image') {
-//		when {
-    //
-	//	expression { BUILD_FLAG=='Y' }
-	//	 }
-      //  steps{
-        //  script{
-          //    sh "docker image ls"
-         //   sh "chmod 777  ./*/ecr_push.sh"
-         //    sh "./*/ecr_push.sh ${AWS_ACCOUNT_ID} ${AWS_REGION} ${ECR_REPO_NAME} ${BUILD_NUMBER}"
-         //   sh "docker image ls"
-        //   }
-        //  }
-        //  } 
-          
-   
-    stage ('Trivy: configuration and IaC review') {
-		  
-		    	steps {
-                     
-			     script {
-               
-        
-         sh "/usr/local/bin/trivy fs --security-checks vuln,config ccf-ui/  || true"
-                     sh "/usr/local/bin/trivy conf  -f json -o trivy.json ./ccf-ui || true"
-                    sh "cat trivy.json || true"                                       
-                    
-                    }
-                  }
-                  }
-                  
-                     stage ('Dockle: Container-security ') {
-		  
-		    	steps {
-                     
-			     script {
-
-                    
-                   sh """echo "Running dockle scan" """
-                   sh 'docker pull goodwithtech/dockle'
-                  
-                   sh ' docker run --rm -v /var/run/docker.sock:/var/run/docker.sock goodwithtech/dockle -f json -o dockle-report.json ccf-ui:latest || true'
-                 
-			    }  
-			}
-		}   
- 
-
-     stage('Deploy to EKS')
-     
-     {
-	      when {
-    
-			  expression { DEPLOY_FLAG=='Y' }
-			}
-          steps{
-              script{
-                  def image_str="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
-                  sh """echo "$image_str" """
-                
-          sh """sed -i "s|image_str|$image_str|g" ./*/deployment.yaml"""
-    //             sh "kubectl apply -f ./*/deployment.yaml -n ${K8_NAMESPACE} --kubeconfig /home/ec2-user/kubeconfig/ccf-ui-eks-demo/kubeconfig"
-             }
-       }
-          
-        }      
-         stage ('DAST - Zap') {
-		  
-		    	steps {
-                
-			     script {
-                     sh 'sudo rm /home/ec2-user/zap.xml || true'
-                     sh "sudo docker run -v /home/ec2-user:/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t https://internal-k8s-ccuieksf-ingressc-c153c8181a-1332443106.us-east-1.elb.amazonaws.com/v2/ -g gen.conf -x zap.xml || true "
-                     sh " sudo cat /home/ec2-user/zap.xml || true"
-                     
-           
-			    }  
-			}
-		} 
-        
-      
-	    stage ('Nikto Scan') 
-        {
-		    steps {
-			sh 'rm nikto-output.xml || true'
-			sh 'docker pull secfigo/nikto:latest'
-			sh 'sudo docker run --user $(id -u):$(id -g) --rm -v $(pwd):/report -i secfigo/nikto:latest -h https:// /report/nikto-output.xml'
-			sh 'cat nikto-output.xml || true'   
-		    }
-	    }
-        
-        	
-         stage ('Port Scan')
-         {
-		    steps {
-			sh 'rm nmap* || true'
-			sh 'sudo docker run --rm -v "$(pwd)":/data uzyexe/nmap -sS -sV -oX nmap 172.31.1.232'
-			sh 'cat nmap'
-		    }
-	    }      
-
- 
-         stage ('defectDojo') {
-		  
-		    	steps {
-                
-			        script {
-                         
+            }
+        }
+        stage('Trivy: configuration and IaC review') {
+            steps {
+                script {
+                    sh "/usr/local/bin/trivy fs --security-checks vuln,config ccf-ui/ || true"
+                    sh "/usr/local/bin/trivy conf -f json -o trivy.json ./ccf-ui || true"
+                    sh "cat trivy.json || true"
+                }
+            }
+        }
+        stage('Dockle: Container-security') {
+            steps {
+                script {
+                    sh 'docker pull goodwithtech/dockle'
+                    sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock goodwithtech/dockle -f json -o dockle-report.json ccf-ui:latest || true'
+                }
+            }
+        }
+        stage('Deploy to EKS') {
+            when {
+                expression { DEPLOY_FLAG == 'Y' }
+            }
+            steps {
+                script {
+                    def image_str = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
+                    sh """echo "$image_str" """
+                    sh """sed -i "s|image_str|$image_str|g" ./*/deployment.yaml"""
+                }
+            }
+        }
+        stage('DAST - Zap') {
+            steps {
+                script {
+                    sh 'sudo rm /home/ec2-user/zap.xml || true'
+                    sh "sudo docker run -v /home/ec2-user:/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t https://internal-k8s-ccuieksf-ingressc-c153c8181a-1332443106.us-east-1.elb.amazonaws.com/ -g gen.conf -r report.html"
+                    sh "sudo cat /home/ec2-user/zap.xml || true"
+                }
+            }
+        }
+        stage('Nikto Scan') {
+            steps {
+                sh 'rm nikto-output.xml || true'
+                sh 'docker pull secfigo/nikto:latest'
+                sh 'sudo docker run --user $(id -u):$(id -g) --rm -v $(pwd):/report -i secfigo/nikto:latest -h https:// /report/nikto-output.xml'
+                sh 'cat nikto-output.xml || true'
+            }
+        }
+        stage('Port Scan') {
+            steps {
+                sh 'rm nmap* || true'
+                sh 'sudo docker run --rm -v "$(pwd)":/data uzyexe/nmap -sS -sV -oX nmap 172.31.1.232'
+                sh 'cat nmap'
+            }
+        }
+        stage('DefectDojo Reporting') {
+            steps {
+                script {
                     sh '''
-                      time=$(date +'%Y-%m-%d')
-                       sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="ZAP Scan" --form minimum_severity="Info" --form skip_duplicates="true" --form close_old_findings="false" --form file=@"/home/ec2-user/zap.xml"
-                        sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="Nmap Scan" --form minimum_severity="Info" --form skip_duplicates="true" --form close_old_findings="false" --form file=@"nmap"
-                        sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="Nikto Scan" --form minimum_severity="Info" --form skip_duplicates="true" --form close_old_findings="false" --form file=@"nikto-output.xml"
-                        sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="Trivy Scan" --form minimum_severity="Info" --form skip_duplicates="false" --form close_old_findings="false" --form file=@"trivy"
-                        sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="Dependency Check Scan" --form minimum_severity="Info" --form skip_duplicates="true" --form close_old_findings="false" --form file=@"/home/ec2-user/.jenkins/workspace/ccf_demo_ui/odc-reports/dependency-check-report.xml"
-                        sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="Trufflehog3 Scan" --form minimum_severity="Info" --form skip_duplicates="true" --form close_old_findings="false" --form file=@"trufflehog.json" || true
-                        sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="Detect-secrets Scan" --form minimum_severity="Info" --form skip_duplicates="true" --form close_old_findings="false" --form file=@"secrets.json"
-                        sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form verified="true" --form active="true" --form lead="1" --form tags="$BUILD_NUMBER" --form scan_date="$time" --form scan_type="Dockle Scan" --form minimum_severity="Info" --form skip_duplicates="true" --form close_old_findings="false" --form file=@"dockle-report.json"
-                '''	
-                    
-			
-			    
-                                                         
-                     sh "docker ps -a"
-
-			    }  
-			}
-		}        
-        
-      }  
-      
-      }
+                    time=$(date +'%Y-%m-%d')
+                    sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form scan_type="ZAP Scan" --form file=@/home/ec2-user/zap.xml --form scan_date=$time --form active=true --form verified=false
+                    sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form scan_type="Nmap Scan" --form file=@/home/ec2-user/nmap.xml --form scan_date=$time --form active=true --form verified=false
+                    sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form scan_type="Nikto Scan" --form file=@/home/ec2-user/nikto-output.xml --form scan_date=$time --form active=true --form verified=false
+                    sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form scan_type="Trivy Scan" --form file=@/home/ec2-user/trivy.json --form scan_date=$time --form active=true --form verified=false
+                    sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form scan_type="Dockle Scan" --form file=@/home/ec2-user/dockle-report.json --form scan_date=$time --form active=true --form verified=false
+                    sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form scan_type="Dependency Check" --form file=@/home/ec2-user/.jenkins/workspace/ccf_demo_ui/odc-reports/dependency-check-report.json --form scan_date=$time --form active=true --form verified=false
+                    sudo curl --location --request POST http://172.31.0.9:8080/api/v2/import-scan/ --header 'Authorization: Token a75345d8c8aa020ae13266a06dfb3329b11325cb' --form engagement="1" --form scan_type="detect-secrets" --form file=@/home/ec2-user/.jenkins/workspace/ccf_demo_ui/detect-secrets/.secrets.baseline --form scan_date=$time --form active=true --form verified=false
+                    '''
+                    sh "docker ps -a"
+                }
+            }
+        }
+    }
+    post {
+        always {
+            echo 'Cleaning up workspace...'
+            cleanWs()
+        }
+        failure {
+            echo 'Notifying about failed build...'
+            mail to: 'aqilshaikh94@gmail.com', subject: "Failed Pipeline: ${currentBuild.fullDisplayName}", body: "Something is wrong with ${env.BUILD_URL}"
+        }
+    }
+}
