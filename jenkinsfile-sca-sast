@@ -2,11 +2,18 @@ pipeline {
     agent { label 'Azure_linux' }
     environment {
         PATH = "/opt/Fortify/Fortify_SCA_and_Apps_24.2.0/bin/:$PATH"
-        Fortify_Upload_Token     = credentials('Fortify_Upload_Token_DEV')
-        Fortify_Download_Token = credentials('	Fortify_Download_Token_DEV')
+        Fortify_Upload_Token = credentials('Fortify_Upload_Token_DEV')
+        Fortify_Download_Token = credentials('Fortify_Download_Token_DEV')
         BD_TOKEN = credentials('TOKEN')
-
         newWorkspace = '/home/'
+        
+        BLACKDUCK_PROJECT_NAME = "TestProject_DEV"
+        BLACKDUCK_PROJECT_VERSION = "TestScan_001_DEV"
+        BLACKDUCK_DETECT_PATH_JAR = "appsec-scripts/blackduck"
+        BLACKDUCK_URL = ""
+        BLACKDUCK_TRUST_CERT = "true"
+        BLACKDUCK_POLICY_CHECK_FAIL_ON_SEVERITIES = "CRITICAL"
+        BLACKDUCK_DETECTOR_SEARCH_EXCLUSION_DEFAULTS = "true"
     }
     stages {
         stage('change Workspace directory') {
@@ -16,9 +23,8 @@ pipeline {
                         sh 'pwd'
                         sh 'ls'
                         dir("app") {
-                             git url: "", credentialsId: ""
+                            git url: "", credentialsId: ""
                         }
-                        
                     }
                 }
             }
@@ -29,57 +35,49 @@ pipeline {
                 dir("app") {
                     git url: "", credentialsId: ""
                 }
-                
             }
         }
         stage('blackduck appsec') {
             steps {
-              script{
-                echo 'blackduck'
-                dir("appsec-scripts") {
-                    git url: "", branch: "purgeps", credentialsId: ""
-                }
-                def blackduckResult = ""
-                def blackduckError = ""
-                def blackduckExitStatus = 0
-                def blackduckOutputFile = "output.txt"
-                def blackDuckCommands = """
-                   # cd appsec-scripts/blackduck;
-                
-                   # set executable permissions;
-                #chmod +x blackduck.sh;
-                
-                    # execute script;
-                    bash blackduck.sh \
-                    --blackduck.project.name="TestProject_DEV"\
-                    --blackduck.project.version="TestScan_001_DEV" \
-                    --blackduck.detect.path.jar="appsec-scripts/blackduck" \
-                    --blackduck.source.code.path="$WORKSPACE/app" \
-                    --blackduck.url="" \
-                    --blackduck.client.api.key="${BD_TOKEN}" \
-                    --blackduck.trust.cert=true \
-                    --detect.policy.check.fail.on.severities=CRITICAL \
-                    --detect.detector.search.exclusion.defaults="true" 
-                                """
+                script {
+                    echo 'blackduck'
+                    dir("appsec-scripts") {
+                        git url: "", branch: "purgeps", credentialsId: ""
+                    }
+                    def blackDuckCommands = """
+                        bash blackduck.sh \\
+                        --blackduck.project.name="${BLACKDUCK_PROJECT_NAME}" \\
+                        --blackduck.project.version="${BLACKDUCK_PROJECT_VERSION}" \\
+                        --blackduck.detect.path.jar="${BLACKDUCK_DETECT_PATH_JAR}" \\
+                        --blackduck.source.code.path="$WORKSPACE/app" \\
+                        --blackduck.url="${BLACKDUCK_URL}" \\
+                        --blackduck.client.api.key="${BD_TOKEN}" \\
+                        --blackduck.trust.cert=${BLACKDUCK_TRUST_CERT} \\
+                        --detect.policy.check.fail.on.severities=${BLACKDUCK_POLICY_CHECK_FAIL_ON_SEVERITIES} \\
+                        --detect.detector.search.exclusion.defaults=${BLACKDUCK_DETECTOR_SEARCH_EXCLUSION_DEFAULTS}
+                    """
                     sh(script: blackDuckCommands)
-                   
-               
-              }
-            }   
+                }
+            }
         }
     }
-    
 }
-
 
 pipeline {
     agent { label '' }
     environment {
-        Fortify_Upload_Token     = credentials('Fortify_Upload_Token_DEV')
+        Fortify_Upload_Token = credentials('Fortify_Upload_Token_DEV')
         Fortify_Download_Token = credentials('Fortify_Download_Token_DEV')
         BD_TOKEN = credentials('BD_DEV_TOKEN')
         FORTIFY_DEV_USER_TOKEN = credentials('FORTIFY_DEV_USER_TOKEN')
         newWorkspace = '/home'
+        
+        FORTIFY_APP_NAME = "Scancentral_DEV"
+        FORTIFY_APP_VERSION = "Scancentral_v1"
+        FORTIFY_SOURCE_CODE_PATH = "$WORKSPACE/app"
+        FORTIFY_FPR_FILE = "devopscoe-javascan.fpr"
+        FORTIFY_URL = ""
+        FORTIFY_ADDITIONAL_PARAMS = "-exclude \"**/test/*\" -logfile 'translation.log'"
     }
     stages {
         stage('build') {
@@ -88,44 +86,31 @@ pipeline {
                 dir("app") {
                     git url: "", credentialsId: ""
                 }
-                
             }
         }
         stage('fortify appsec') {
             steps {
-              script{
-                echo 'fortify'
-                dir("appsec-scripts") {
-                    git url: "", branch: "master", credentialsId: ""
+                script {
+                    echo 'fortify'
+                    dir("appsec-scripts") {
+                        git url: "", branch: "master", credentialsId: ""
+                    }
+                    def fortifyCommands = """
+                        chmod +x appsec-scripts/fortify/fortify.sh
+                        fortify.sh \\
+                        --fortify.app.name="${FORTIFY_APP_NAME}" \\
+                        --fortify.app.version="${FORTIFY_APP_VERSION}" \\
+                        --fortify.source.code.path="${FORTIFY_SOURCE_CODE_PATH}" \\
+                        --fortify.fpr.file="${FORTIFY_FPR_FILE}" \\
+                        --fortify.client.api.key="${Fortify_Upload_Token}" \\
+                        --fortify.client.user.token="${FORTIFY_DEV_USER_TOKEN}" \\
+                        --fortify.client.api.key.download="${Fortify_Download_Token}" \\
+                        --fortify.url="${FORTIFY_URL}" \\
+                        --fortify.additional.params="${FORTIFY_ADDITIONAL_PARAMS}"
+                    """
+                    sh(script: fortifyCommands)
                 }
-                def fortifyResult = ""
-                def fortifyError = ""
-                def fortifyExitStatus = 0
-                def fortifyOutputFile = "output.txt"
-                def fortifyCommands = """
-                   #cd appsec-scripts/fortify;
-                
-                   # set executable permissions;
-                   chmod +x appsec-scripts/fortify/fortify.sh;
-                
-                    # execute script;
-                  fortify.sh \
-                  --fortify.app.name="Scancentral_DEV" \
-                  --fortify.app.version="Scancentral_v1" \
-                  --fortify.source.code.path="$WORKSPACE/app" \
-                  --fortify.fpr.file="devopscoe-javascan.fpr" \
-                  --fortify.client.api.key="${Fortify_Upload_Token}" \
-                  --fortify.client.user.token="${FORTIFY_DEV_USER_TOKEN}  " \
-                  --fortify.client.api.key.download="${Fortify_Download_Token}" \
-                  --fortify.url="" \
-                  --fortify.additional.params="-exclude \"**/test/*\" -logfile "translation.log""
-                                   """
-                sh(script: fortifyCommands)
-                   
-
-                
-                }
-              }
-            }   
+            }
         }
     }
+}
