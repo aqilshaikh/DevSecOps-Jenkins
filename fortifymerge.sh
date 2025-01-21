@@ -1,3 +1,6 @@
+#!/bin/bash
+
+# Initialize variables
 FORTIFY_SOURCE_APP_NAME=""
 FORTIFY_SOURCE_APP_VERSION=""
 FORTIFY_DEST_APP_NAME=""
@@ -7,26 +10,47 @@ FORTIFY_URL=""
 FORTIFY_CLIENT_API_KEY=""
 FORTIFY_CLIENT_API_KEY_DOWNLOAD=""
 
-for i in $*; do
-  if [[ $i == --fortify.source.app.name=* ]]; then
-    FORTIFY_SOURCE_APP_NAME=$(cut -d "=" -f2 <<< "$i")
-  elif [[ $i == --fortify.source.app.version=* ]]; then
-    FORTIFY_SOURCE_APP_VERSION=$(cut -d "=" -f2 <<< "$i")
-  elif [[ $i == --fortify.dest.app.name=* ]]; then
-    FORTIFY_DEST_APP_NAME=$(cut -d "=" -f2 <<< "$i")
-  elif [[ $i == --fortify.dest.app.version=* ]]; then
-    FORTIFY_DEST_APP_VERSION=$(cut -d "=" -f2 <<< "$i")
-  elif [[ $i == --fortify.client.api.key=* ]]; then
-    FORTIFY_CLIENT_API_KEY=$(cut -d "=" -f2 <<< "$i")
-  elif [[ $i == --fortify.client.api.key.download=* ]]; then
-    FORTIFY_CLIENT_API_KEY_DOWNLOAD=$(cut -d "=" -f2 <<< "$i")
-  elif [[ $i == --fortify.fpr.file=* ]]; then
-    FORTIFY_FPR_FILE_DEV=$(cut -d "=" -f2 <<< "$i")
-  elif [[ $i == --fortify.url=* ]]; then
-    FORTIFY_URL=$(cut -d "=" -f2 <<< "$i")
-  fi
+# Parse input parameters
+for i in "$@"; do
+  case $i in
+    --fortify.source.app.name=*)
+      FORTIFY_SOURCE_APP_NAME="${i#*=}"
+      ;;
+    --fortify.source.app.version=*)
+      FORTIFY_SOURCE_APP_VERSION="${i#*=}"
+      ;;
+    --fortify.dest.app.name=*)
+      FORTIFY_DEST_APP_NAME="${i#*=}"
+      ;;
+    --fortify.dest.app.version=*)
+      FORTIFY_DEST_APP_VERSION="${i#*=}"
+      ;;
+    --fortify.client.api.key=*)
+      FORTIFY_CLIENT_API_KEY="${i#*=}"
+      ;;
+    --fortify.client.api.key.download=*)
+      FORTIFY_CLIENT_API_KEY_DOWNLOAD="${i#*=}"
+      ;;
+    --fortify.fpr.file=*)
+      FORTIFY_FPR_FILE_DEV="${i#*=}"
+      ;;
+    --fortify.url=*)
+      FORTIFY_URL="${i#*=}"
+      ;;
+    *)
+      echo "Unknown option $i"
+      exit 1
+      ;;
+  esac
 done
 
+# Validate inputs
+if [ -z "$FORTIFY_SOURCE_APP_NAME" ] || [ -z "$FORTIFY_SOURCE_APP_VERSION" ] || [ -z "$FORTIFY_DEST_APP_NAME" ] || [ -z "$FORTIFY_DEST_APP_VERSION" ] || [ -z "$FORTIFY_FPR_FILE_DEV" ] || [ -z "$FORTIFY_URL" ] || [ -z "$FORTIFY_CLIENT_API_KEY" ] || [ -z "$FORTIFY_CLIENT_API_KEY_DOWNLOAD" ]; then
+  echo "Error: Missing required parameters."
+  exit 1
+fi
+
+# Display environment variables
 echo "***********************************************"
 echo "Environment variables for Fortify SCA"
 echo "FORTIFY_SOURCE_APP_NAME=$FORTIFY_SOURCE_APP_NAME"
@@ -39,34 +63,37 @@ echo "FORTIFY_CLIENT_API_KEY=$FORTIFY_CLIENT_API_KEY"
 echo "FORTIFY_CLIENT_API_KEY_DOWNLOAD=$FORTIFY_CLIENT_API_KEY_DOWNLOAD"
 echo "***********************************************"
 
-echo "INFO: Download FPR"
-
+# Download FPR
+echo "INFO: Downloading FPR..."
 fortifyclient downloadFPR \
--file "$FORTIFY_FPR_FILE_DEV" \
--application "$FORTIFY_SOURCE_APP_NAME" \
--applicationVersion "$FORTIFY_SOURCE_APP_VERSION" \
--url "$FORTIFY_URL" \
--authtoken "$FORTIFY_CLIENT_API_KEY_DOWNLOAD"
+  -file "$FORTIFY_FPR_FILE_DEV" \
+  -application "$FORTIFY_SOURCE_APP_NAME" \
+  -applicationVersion "$FORTIFY_SOURCE_APP_VERSION" \
+  -url "$FORTIFY_URL" \
+  -authtoken "$FORTIFY_CLIENT_API_KEY_DOWNLOAD"
 
-result=$? 
+# Check download result
+result=$?
 if [ $result -ne 0 ]; then
-    echo " Error: Fortify Download FPR Failed $result" >&2
-    exit 1
+  echo "Error: Fortify Download FPR Failed with exit code $result" >&2
+  exit 1
 fi
 
-echo "INFO: Upload scan"
-
+# Upload scan
+echo "INFO: Uploading FPR..."
 fortifyclient uploadFPR \
--file "$FORTIFY_FPR_FILE_DEV" \
--application "$FORTIFY_DEST_APP_NAME" \
--applicationVersion "$FORTIFY_DEST_APP_VERSION" \
--url "$FORTIFY_URL" \
--authtoken "$FORTIFY_CLIENT_API_KEY"
+  -file "$FORTIFY_FPR_FILE_DEV" \
+  -application "$FORTIFY_DEST_APP_NAME" \
+  -applicationVersion "$FORTIFY_DEST_APP_VERSION" \
+  -url "$FORTIFY_URL" \
+  -authtoken "$FORTIFY_CLIENT_API_KEY"
 
-result=$? 
+# Check upload result
+result=$?
 if [ $result -ne 0 ]; then
-    echo " Error: Fortify upload FPR failed $result" >&2
-    exit 1
+  echo "Error: Fortify upload FPR failed with exit code $result" >&2
+  exit 1
 fi
 
+echo "INFO: Fortify merge completed successfully."
 exit 0
