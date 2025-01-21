@@ -75,7 +75,7 @@ The Jenkins pipeline defined in the `jenkinsfile` includes several stages to ens
 
 ### Pipeline Workflow
 
-```mermaid
+
 graph TD
     A[Checkout] --> B[Git-Secrets Scan]
     B --> C[Source-Composition-Analysis]
