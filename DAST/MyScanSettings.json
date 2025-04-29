@@ -1,0 +1,22 @@
+{
+  "DASTApiSettings": {
+    "RootUrl": "https://dast.example.com:443/api"
+  },
+  "ScanSettings": {
+    "targetUrl": "https://myapp.example.com",
+    "scanPolicy": "Criticals and Highs",
+    "credentials": {
+      "type": "Basic",
+      "username": "myUsername",
+      "password": "myPassword"
+    }
+  },
+  "ReportingSettings": {
+    "reportFormat": "html"
+  },
+  "SSCSettings": {
+    "SSCRootUrl": "https://ssc.example.com/ssc",
+    "ServiceAccountUserName": "sscServiceUser",
+    "ServiceAccountPassword": "sscServicePassword"
+  }
+}
